@@ -71,9 +71,9 @@ while (criterion < alpha){
 	myList <- myList + 1 - orderedP[k]
 	criterion <- myList/k
 }
-
-sigTranscripts1[perm[1:(k-1)]] <- rep("DE",k-1)
-
+if(k > 1){
+	sigTranscripts1[perm[1:(k-1)]] <- rep("DE",k-1)
+}
 # FDR: alpha = 0.05
 alpha <- 0.05
 p <- ramones
@@ -88,8 +88,9 @@ while (criterion < alpha){
 	myList <- myList + 1 - orderedP[k]
 	criterion <- myList/k
 }
+if(k > 1){
 sigTranscripts2[perm[1:(k-1)]] <- rep("DE",k-1)
-
+}
 
 # FDR: alpha = 0.1
 alpha <- 0.1
@@ -105,8 +106,9 @@ while (criterion < alpha){
 	myList <- myList + 1 - orderedP[k]
 	criterion <- myList/k
 }
+if(k > 1){
 sigTranscripts3[perm[1:(k-1)]] <- rep("DE",k-1)
-
+}
 ramones <- cbind(ramones,sigTranscripts1, sigTranscripts2, sigTranscripts3 )
 
 write.table(ramones,col.names = c("log-Theta","log-W","Prob(D.E)","fdr_0.01","fdr_0.05","fdr_0.1"),file = "estimates.txt",quote = FALSE)
