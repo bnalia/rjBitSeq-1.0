@@ -8,8 +8,6 @@ VAR1=$(PWD)
 
 all: $(PROGRAMS)
 	echo "#!/bin/bash" > cpThis.bash
-	#(echo "cp $(VAR1)/sparse.so sparse.so"; echo "cp $(VAR1)/partitionMerge2.R partitionMerge2.R"; echo "cp $(VAR1)/getClusters.R getClusters.R" ) >> cpThis.bash
-	#(echo "cp $(VAR1)/sparse.so sparse.so"; echo "cp $(VAR1)/partitionParallel.R partitionMerge2.R"; echo "cp $(VAR1)/getClusters.R getClusters.R" ) >> cpThis.bash
 	(echo "cp $(VAR1)/sparse.so sparse.so"; echo "cp $(VAR1)/partitionParallelCut.R partitionMerge2.R"; echo "cp $(VAR1)/getClusters.R getClusters.R" ) >> cpThis.bash
 	chmod u+x cpThis.bash
 	chmod u+x rjBitSeq

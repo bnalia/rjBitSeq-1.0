@@ -1,10 +1,51 @@
 #!/bin/bash
 
+if [ $# -eq 0 ]
+  then
+	echo "No arguments supplied"
+	echo "Display usage info: rjBitSeq --help"
+	exit 0
+fi
+
+if [ $1 == C ]
+then
+	echo "ERROR: Two sets of files should be provided, separated by C"
+	echo "Display usage info: rjBitSeq --help"
+	echo "exiting."
+	exit 0
+fi
+
+if [ $1 == --help ]
+then
+	echo ""
+	echo ".............................................................................................."
+	echo ". Usage: rjBitSeq <outputDir> <.prob files condition A> C <.prob files condition B>          ."
+	echo ".                                                                                            ."
+	echo ". Reversible Jump algorithm for Differential Expression analysis                             ."	
+	echo ".                                                                                            ."
+	echo ". Arguments:                                                                                 ."
+	echo ".    <outputDir>: Name of the output directory.                                              ."
+	echo ".                                                                                            ."
+	echo ".    <.prob files condition A>: Space-separated list of '.prob' files for the first sample.  ."
+	echo ".                                                                                            ."
+	echo ".    <.prob files condition B>: Space-separated list of '.prob' files for the second sample. ."
+	echo ".                                                                                            ."
+	echo ". Note: '.prob' files contain alignment probabilities for each read                          ."
+	echo ".       and they are computed using the 'parseAlignment' command of Bitseq.                  ."
+	echo ".                                                                                            ."
+	echo ". Detailed documentation and examples: https://github.com/mqbssppe/rjBitSeq-1.0/wiki         ."
+	echo ".............................................................................................."
+	echo ""
+	exit 0
+fi
+
+
 mkdir $1
 CWD=$(pwd)
 echo "output written to $CWD/$1"
 a=`expr 1`
 b=`expr 0`
+c=`expr 2`
 
 
 echo "First condition files:"
@@ -19,12 +60,14 @@ do
 		if [ $i == C ]
 		then
 			a=`expr 2`
+			c=`expr 1`
 		else
 			b=$((b+1))
 			echo "	: $i, $b"
 			if [ ! -f $i ]; then
 				echo "ERROR: File not found!"
 				echo "exiting."
+				echo "Display usage info: rjBitSeq --help"
 				exit 0
 			fi
 			cd $1
@@ -45,6 +88,7 @@ do
 	if [ $i == C ]
 	then
 		a=`expr 2`
+		c=`expr 1`
 	fi
 	if [ $a -eq 2 ]
 	then
@@ -54,6 +98,7 @@ do
 			echo "	: $i, $b"
 			if [ ! -f $i ]; then
 				echo "ERROR: File not found!"
+				echo "Display usage info: rjBitSeq --help"
 				echo "exiting."
 				exit 0
 			fi
@@ -63,6 +108,14 @@ do
 		fi
 	fi
 done
+
+if [ $c -eq 2 ]
+then
+	echo "ERROR: Two sets of files should be provided, separated by C"
+	echo "Display usage info: rjBitSeq --help"
+	echo "exiting."
+	exit 0
+fi
 
 cd $1
 cpThis.bash
