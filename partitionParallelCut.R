@@ -233,39 +233,6 @@ tt <- as.numeric((proc.time() - ptm))[3]
 cat(paste("Size = ",round(ssss,3)," Mb. Time += ",tt,sep = ""),"\n");
 
 
-#pdf(file = "spanki1.pdf",width = 9,height = 9)
-#n<-(3001:3200);m<-simil[n,n];image(m,yaxt="n",xaxt="n",main = "Matrix of read alignments to Clusters",ylab = "",xlab = "")
-#axis(2, at = seq(0,1,length=length(n)),labels=n[length(n):1], col.axis="red",tick=FALSE)
-#axis(3, at = seq(0,1,length=length(n)),labels=n, col.axis="red",tick=FALSE)
-#dev.off()
-
-
-#pdf(file = "spanki2.pdf",width = 9,height = 9)
-#n<-(3001:4000);m<-log(0.1+simil[n,n]);image(m[length(n):1,],bty="n",yaxt="n",xaxt="n",main = "Transcript ID",ylab = "Transcript ID",sub = "Matrix of read alignments to Clusters")
-#axis(3, at = seq(0,1,length=length(n)),labels=n, col.axis="red",tick=FALSE)
-#axis(2, at = seq(0,1,length=length(n)),labels=n[length(n):1], col.axis="red",tick=FALSE)
-#dev.off()
-
-
-#pdf(file = "spanki3.pdf",width = 9,height = 9)
-#n<-(15001:17000);m<-log(1+simil[n,n]);image(m[length(n):1,],bty="n",yaxt="n",xaxt="n",main = "Transcript ID",ylab = "Transcript ID",sub = "Matrix of read alignments to Clusters")
-#axis(3, at = seq(0,1,length=length(n)),labels=n, col.axis="red",tick=FALSE)
-#axis(2, at = seq(0,1,length=length(n)),labels=n[length(n):1], col.axis="red",tick=FALSE)
-#dev.off()
-
-#pdf(file = "drosoclusters4.pdf",width = 9,height = 9)
-#n<-(1:1000);m<-log(simil[n,n]);image(m[length(n):1,],col=heat.colors(1000),bty="n",yaxt="n",xaxt="n",xaxt="n",main = "Transcript ID",ylab = "Transcript ID",sub = "Matrix of read alignments to Clusters")
-#axis(3, at = seq(0,1,length=length(n)),labels=n, col.axis="red",tick=FALSE)
-#axis(2, at = seq(0,1,length=length(n)),labels=n[length(n):1], col.axis="red",tick=FALSE)
-#dev.off()
-
-#pdf(file = "drosoclusters5.pdf",width = 9,height = 9)
-#n<-(20000:25000);m<-log(simil[n,n]);image(m[length(n):1,],col=heat.colors(1000),bty="n",yaxt="n",xaxt="n",xaxt="n",main = "Transcript ID",ylab = "Transcript ID",sub = "Matrix of read alignments to Clusters")
-#axis(3, at = seq(0,1,length=length(n)),labels=n, col.axis="red",tick=FALSE)
-#axis(2, at = seq(0,1,length=length(n)),labels=n[length(n):1], col.axis="red",tick=FALSE)
-#dev.off()
-
-
 m <- K-1
 Dead <- 0
 Singles <- 0
@@ -428,7 +395,6 @@ names(orderedNames) <- namesClusters
 
 
 ################################################################################
-# find 100 connections that are large
 
 
 rs <- rowSums(newReadsPerReplicate)
@@ -564,47 +530,14 @@ if(1>2){
 
 dir.create("jobs")
 setwd("jobs/")
-#for (k in 1:nJobs){
-#        vec <- vec2[k,]
-#       job <- file(paste("job_",k,".sh",sep = ""),open = "w")
-#        cat("#!/bin/bash","\n",file = job)
-#        cat("cd ../tmp","\n",file = job)
-#        cat("echo \"Running Reversible Jump \"","\n",file = job)
-#        cat("cd clusters","\n",file = job)
-#        cat(paste("for i in {",vec[1],"..",vec[2],"}",sep = ""),"\n",file = job)
-#        cat("do","\n",file = job)
-#        cat("echo \"        Running RJMCMC at: cluster_$i\"","\n",file = job)
-#        cat("cd cluster_$i","\n",file = job)
-#        cat("echo \"              number of transcripts:\"","\n",file = job)
-#        cat("head -1 data.tr","\n",file = job)
-#        cat("rjFULL > rjmcmc.log","\n",file = job)
-#        cat("cd ..","\n",file = job)
-#        cat("done","\n",file = job)
-#        cat("cd ..","\n",file = job)
-#        cat("echo \"Done! \"","\n",file = job)
-#        close(job)
-#        system(paste("chmod u+x job_",k,".sh",sep=""))
-#        
-#}
 priorPerm <- order(rs,decreasing = TRUE)
 for (k in 1:nJobs){
         vec <- vec2[k,]
         job <- file(paste("job_",k,".sh",sep = ""),open = "w")
         cat("#!/bin/bash","\n",file = job)
         cat(paste("cd ../tmp/clusters/cluster_",priorPerm[k],sep=""),"\n",file = job)
-        #cat("echo \"Running Reversible Jump \"","\n",file = job)
-        #cat("cd clusters","\n",file = job)
-        #cat(paste("for i in {",vec[1],"..",vec[2],"}",sep = ""),"\n",file = job)
-        #cat("do","\n",file = job)
-        #cat("echo \"        Running RJMCMC at: cluster_$i\"","\n",file = job)
-        #cat("cd cluster_$i","\n",file = job)
-        #cat("echo \"              number of transcripts:\"","\n",file = job)
         cat("head -1 data.tr","\n",file = job)
         cat("rjFULL > rjmcmc.log","\n",file = job)
-        #cat("cd ..","\n",file = job)
-        #cat("done","\n",file = job)
-        #cat("cd ..","\n",file = job)
-        #cat("echo \"Done! \"","\n",file = job)
         close(job)
         system(paste("chmod u+x job_",k,".sh",sep=""))
         
@@ -630,7 +563,8 @@ cat("#!/bin/bash","\n",file = job)
 #cat("echo \"Running Reversible Jump MCMC:\"","\n",file = job)
 cat("echo \"(#M nTranscripts ClusterID nReads)\"","\n",file = job)
 cat("cd jobs","\n",file = job)
-cat(paste("parallel --no-notice ./job_{}.sh ::: {1..",nJobs,"}",sep=""),"\n",file = job)
+#cat(paste("parallel --no-notice ./job_{}.sh ::: {1..",nJobs,"}",sep=""),"\n",file = job)
+cat(paste("parallel --gnu ./job_{}.sh ::: {1..",nJobs,"}",sep=""),"\n",file = job)
 cat("wait","\n",file = job)
 cat("cd ..","\n",file = job)
 cat("R CMD BATCH  getClusters.R","\n",file = job)
