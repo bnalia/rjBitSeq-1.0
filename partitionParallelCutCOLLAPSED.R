@@ -540,8 +540,7 @@ for (k in 1:nJobs){
         cat("#!/bin/bash","\n",file = job)
         cat(paste("cd ../tmp/clusters/cluster_",priorPerm[k],sep=""),"\n",file = job)
         cat("head -1 data.tr","\n",file = job)
-        cat("rjFULL > rjmcmc.log","\n",file = job)	# reversible jump sampler
-#        cat("collapsed > sampler.log","\n",file = job)	# collapsed sampler
+	cat("collapsed > sampler.log","\n",file = job)  # collapsed sampler
         close(job)
         system(paste("chmod u+x job_",k,".sh",sep=""))
         
@@ -609,7 +608,7 @@ cat(myExp,"\n",file = job)
 
 cat("cd jobs","\n",file = job)
 
-cat("echo \"     OK. Now I will continue running rjMCMC...\"","\n",file = job)
+cat("echo \"     OK. Now I will continue running MCMC...\"","\n",file = job)
 cat(paste("parallel --gnu ./job_{}.sh ::: {",deleteThreshold + 1,"..",nJobs,"}",sep=""),"\n",file = job)
 cat("wait","\n",file = job)
 

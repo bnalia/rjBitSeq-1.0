@@ -43,6 +43,10 @@ using namespace boost::math;
 
 	vector< int > r;
 	vector< int > s;
+
+	vector< int > z_alloc;							//z = (z_1,...,z_r)
+	vector< int > xi_alloc;							//xi = (xi_1,...,xi_s)
+
 	//double * theta;
 	//double * w;
 	vector<double> theta (K,0.0);
@@ -77,7 +81,7 @@ using namespace boost::math;
 	vector<double> gamma_prior (K,1.0);	//prior for v
 	vector<double> v_new (K,0.0);
 	
-	int nMIX = 5, mixID, kRest;
+	int nMIX = 5, mixID, kRest, myClustID;
 	vector<double> beta_paramNEW (nMIX,1.0); //beta parameters of mixture
 
 	const double threshold = pow(10.0,-80.0);
@@ -85,16 +89,22 @@ using namespace boost::math;
 	void dir(vector<double>&, int);
 	double allocate(int , int );
 	double allocate_new(int , int );
+	double allocateCollapsed(int , int );
 	double unifRand();
 	void log_like();
 	void log_like_new();
 	void permutation_current();
+	void permutation_current_collapsed();
 	void permutation_prop();
+	void permutation_prop_collapsed();
 	double bp(int);
 	double dp(int);
 	double  beta_rand( double , double );
 	double log_beta(double , double , double );
+	double log_f_c_old();
+	double log_f_c_new();
 	double birth_accept_prob(double , double ,double , double ,int ,int ,double );
+	double birth_mh(double , double , int ,int );
 //****************************************************************************************************************************************
 	int n_obs, c_sum, c_sum_new;								// number of components and number of observations
 //****************************************************************************************************************************************
@@ -152,6 +162,7 @@ int main()
         inFile >> temp;
         inFile >> cluster;
         cout<< "cluster = "<< cluster<<endl;
+	myClustID = cluster;
         inFile.close();
 	
 	srand(time(NULL)) ;
@@ -229,6 +240,7 @@ int main()
 		if (tid == cluster){
 			inFile >> num;
 			y_1.push_back(num);
+			xi_alloc.push_back(num);
 			vector<double> row(num);
 			vector<int> c_row(num);
 			temp = 0.0;
@@ -252,6 +264,7 @@ int main()
 			if (tid == cluster){
 				inFile >> num;
 				y_1.push_back(num);
+				xi_alloc.push_back(num);
 				vector<double> row(num);
 				vector<int> c_row(num);
 				//cout << "i = "<< i + 1 << ", nMap = "<< num << "  ";
@@ -317,6 +330,7 @@ int main()
 		if (tid == cluster){
 			inFile >> num;
 			y_2.push_back(num);
+			z_alloc.push_back(num);
 			vector<double> row(num);
 			vector<int> c_row(num);
 			temp = 0.0;
@@ -340,6 +354,7 @@ int main()
 			if (tid == cluster){
 				inFile >> num;
 				y_2.push_back(num);
+				z_alloc.push_back(num);
 				vector<double> row(num);
 				vector<int> c_row(num);
 				for ( j = 0; j < num; ++j){
@@ -401,7 +416,8 @@ int main()
 
 
 	//if (K > 200){ numberChains = 2; }
-	ofstream ar_out ( ar_file.data() );
+
+        ofstream ar_out ( ar_file.data() );
 
 	for(chain = 0; chain < numberChains; chain++){ 
 		
@@ -413,11 +429,13 @@ int main()
 		cout<<"name = "<< myString.data()<<endl;
 		convert.str("");
 		ofstream de_file ( myString.data() );
+
 		if (chain == numberChains/2){
 			cout << "swap:"<<endl;
 			x_1.swap(x_2);
 			y_1.swap(y_2);
 			c_1.swap(c_2);
+			z_alloc.swap(xi_alloc);
 			cum_sum_1.swap(cum_sum_2);
 			papasA.swap(papasB);
 			r.swap(s);
@@ -442,13 +460,18 @@ int main()
 		convert.str("");
 		ofstream w_out ( myString.data() );
 
+		//if( chain < numberChains/2){
+		//	initial_state = 0;
+		//}else{
+		//	initial_state = 1;
+		//}
 		if ((chain+1) % 2 == 0){
 			initial_state = 1;
 		}else{
 			initial_state = 0;
 		}
 		
-		
+
 
 		//if (K > 200){ initial_state = 0; }
 
@@ -507,8 +530,8 @@ int main()
 	##################################################################################################################################
 	*/
 
-		int sample1, sample2, j1, j2, position;
-		double cum_sum1, cum_sum2, tot_sum1, tot_sum2, uni, delta, beta_param2, prob, rj_rate = 0.0;
+		int sample1, sample2, j1, j2;
+		double cum_sum1, cum_sum2, tot_sum1, tot_sum2, uni, prob, rj_rate = 0.0;
 	/*			Burn-in period
 	##################################################################################################################################
 	*/
@@ -577,65 +600,19 @@ int main()
 
 		tot_sum1 = r[0]/papasA[0] + s[0]/papasB[0] + K;
 		tot_sum2 = r[0]/papasA[0] + K;
+		//cout << tot_sum1 << ", " << tot_sum2 <<endl;
 		sample1 = 1;
 		sample2 = 1; 
 		gPrior = beta_rand(0.5,0.5);
-//		gPrior = 0.95;
 		for(iter = 1; iter<iterNEW;iter++){
-			//generate random integers in 1,...,n_1 and 1,...,n_2
-			//sample1 = 1 + rand() % n_1;
-			//sample2 = 1 + rand() % n_2; 
-			allocate(sample1, sample2);	// generate allocations 
-			//tot_sum1 = r[sample1 - 1]/papasA[sample1 - 1] + s[sample2 - 1]/papasB[sample2 - 1] + K;
-			//tot_sum2 = r[sample1 - 1]/papasA[sample1 - 1] + K;
-
-			cum_sum1 = 0.0;
-			cum_sum2 = 0.0;
-
-			if(c_sum<K){
-				for (k = 0; k < K - c_sum; k++){
-					alpha_gd[k] = alpha_prior[permutation[k]] + sum_1[permutation[k]] + sum_2[permutation[k]];
-					beta_gd[k] = tot_sum1 - (alpha_gd[k] + cum_sum1);
-					cum_sum1 += alpha_gd[k];
-					cum_sum2 += alpha_gd[k] - sum_2[permutation[k]];
-				}
-			}
-			if (c_sum>0){
-				for (k = K - c_sum; k < K ; k++){
-					alpha_gd[k] = alpha_prior[permutation[k]] + sum_1[permutation[k]];
-					beta_gd[k] = tot_sum2 - (alpha_gd[k] + cum_sum2);
-					cum_sum2 += alpha_gd[k];
-					w_temp[k - K + c_sum] = gamma_prior[permutation[k -K + c_sum]] + sum_2[permutation[k]];			
-				}	
-			}
-
-			gen_dir(alpha_gd,beta_gd,K);
-			permutation_current();	
-			if (c_sum>0){
-				dir(w_temp,c_sum);
-				for (k = 0; k < K - c_sum; k++){
-					w_temp[k] = u[k];
-				}
-				for (k = K-c_sum; k < K; k++){
-					w_temp[k] = v[k - K + c_sum]*u_sum_c1;
-				}
-				for (k = 0; k < K; k++){
-					w[k] = w_temp[inv_permutation[k]];
-				}
-			}else{
-				for (k = 0; k< K; k++){
-					w[k] = theta[k];
-				}
-			}
-			log_like();
-		
-	//		RJ STEP
+			//cout << iter <<endl;
+			allocateCollapsed(sample1, sample2);	// generate allocations (and compute c_sum) 
+			permutation_current_collapsed();
+			log_likelihood = log_f_c_old();
+	//		Metropolis Hastings
 			uni = unifRand();
 			uni = log(uni);
 			if (uni < bp(c_sum)){
-				mixID = rand() % nMIX;
-				beta_param2 = beta_paramNEW[mixID];
-				delta = beta_rand(beta_param1,beta_param2);
 				if (c_sum == 0){
 					std::fill (c_new.begin(),c_new.end(),0);
 					j1 = rand() % K;
@@ -647,8 +624,6 @@ int main()
 					c_new[j1] = 1;
 					c_new[j2] = 1;
 					c_sum_new = 2;
-					v_new[0] = delta;
-					v_new[1] = 1.0 - delta;				
 				}else{
 					j = rand() % (K-c_sum);
 					k = permutation[j];
@@ -656,43 +631,16 @@ int main()
 					c_new[k] = 1;
 					for(i = k+1; i < K;i++){c_new[i] = c_vec[i];}
 					c_sum_new = c_sum +1;
-					position = accumulate(c_vec.begin(),c_vec.begin() + k,0);
-					for (i = 0; i < position; i++){
-						v_new[i] = v[i]*(1.0 - delta);
-					}
-					v_new[position] = delta;
-					for (i = position + 1; i < c_sum_new; i++){
-						v_new[i] = v[i - 1]*(1.0 - delta);
-					}
 				}
-				permutation_prop();
-				for (k = 0; k < K - c_sum_new; k++){
-					w_temp[k] = u_temp[k];
-				}
-				for (k = K-c_sum_new; k < K; k++){
-					w_temp[k] = v_new[k - K + c_sum_new]*u_sum_c1_new;
-				}
-				for (k = 0; k < K; k++){
-					u_temp[k] = w_temp[inv_permutation_new[k]];
-					//w_temp[k] = u_temp[k]; //w_temp is the proposed w.
-				}
-				for (k = 0; k < K; k++){
-					w_temp[k] = u_temp[k]; //w_temp is the proposed w.
-				}
-				allocate_new(sample1, sample2);	// generate allocations 
-				log_like_new();
-				prob = birth_accept_prob(log_likelihood, log_likelihood_new, p_alloc, p_alloc_new, c_sum,c_sum_new,delta);
+				log_likelihood_new = log_f_c_new();
+				prob = birth_mh(log_likelihood, log_likelihood_new, c_sum,c_sum_new);
+				//prob = birth_accept_mh(log_likelihood, log_likelihood_new, p_alloc, p_alloc_new, c_sum,c_sum_new,delta);
+				prob = 0.0;
 			
 			}else{
 				if (c_sum ==2){
 					std::fill (c_new.begin(),c_new.end(),0);				
 					c_sum_new = 0;
-					for ( k = 0; k < K; k++){
-						w_temp[k] = theta[k];
-					} 
-					delta = v[0];
-					permutation_prop();
-
 				}else{
 					j = 1 + rand() % (c_sum-2);
 					k = permutation[K - c_sum + j];
@@ -700,34 +648,10 @@ int main()
 					c_new[k] = 0;
 					for(i = k+1; i < K;i++){c_new[i] = c_vec[i];}
 					c_sum_new = c_sum -1;
-					delta = v[j];
-					for(i = 0; i < j; i++){
-						v_new[i] = v[i]/(1.0-delta);
-					}
-					for(i = j; i < c_sum_new; i++){
-						v_new[i] = v[i+1]/(1.0-delta);
-					}
-
-					permutation_prop();
-
-					for (k = 0; k < K - c_sum_new; k++){
-						w_temp[k] = u_temp[k];
-					}
-					for (k = K-c_sum_new; k < K; k++){
-						w_temp[k] = v_new[k - K + c_sum_new]*u_sum_c1_new;
-					}
-					for (k = 0; k < K; k++){
-						u_temp[k] = w_temp[inv_permutation_new[k]];
-						//w_temp[k] = u_temp[k]; //w_temp is the proposed w.
-					}
-					for (k = 0; k < K; k++){
-						w_temp[k] = u_temp[k]; //w_temp is the proposed w.
-					}
 				}
-
-				allocate_new(sample1, sample2);	// generate allocations 
-				log_like_new();
-				prob = - birth_accept_prob(log_likelihood_new, log_likelihood, p_alloc_new, p_alloc, c_sum_new,c_sum,delta);
+				log_likelihood_new = log_f_c_new();
+				prob = - birth_mh(log_likelihood_new, log_likelihood, c_sum_new,c_sum);
+				//prob = - birth_mh(log_likelihood_new, log_likelihood, p_alloc_new, p_alloc, c_sum_new,c_sum,delta);
 			}
 		
 			uni = unifRand();
@@ -735,22 +659,61 @@ int main()
 			if ( uni < prob){
 				for (k = 0; k < K; k++){
 					c_vec[k] = c_new[k];
-					c_sum = c_sum_new;
-					w[k] = w_temp[k];
-					permutation[k] = permutation_new[k];
 					gamma_prior[k] = 1.0;
 				}
-				//gamma_prior[c_sum - 1] = kRest + 0.0;
+				c_sum = c_sum_new;
 				rj_rate++;
+				permutation_current_collapsed(); //update permutation
 			} 
 //			Update gPrior:
-			//gPrior = 0.95;
 			gPrior = beta_rand(c_sum + 0.5, K - c_sum + 0.5);
+			//gPrior = 0.95;
 			t_end = omp_get_wtime( );
 			if (iter % saveStep == 0){
 				if(iter > myBurn){
 					nIterations++;
 				}
+//###########################################################################################
+//###########################################################################################
+				cum_sum1 = 0.0;
+				cum_sum2 = 0.0;
+				if(c_sum<K){
+					for (k = 0; k < K - c_sum; k++){
+						alpha_gd[k] = alpha_prior[permutation[k]] + sum_1[permutation[k]] + sum_2[permutation[k]];
+						beta_gd[k] = tot_sum1 - (alpha_gd[k] + cum_sum1);
+						cum_sum1 += alpha_gd[k];
+						cum_sum2 += alpha_gd[k] - sum_2[permutation[k]];
+					}
+				}
+				if (c_sum>0){
+					for (k = K - c_sum; k < K ; k++){
+						alpha_gd[k] = alpha_prior[permutation[k]] + sum_1[permutation[k]];
+						beta_gd[k] = tot_sum2 - (alpha_gd[k] + cum_sum2);
+						cum_sum2 += alpha_gd[k];
+						w_temp[k - K + c_sum] = gamma_prior[permutation[k -K + c_sum]] + sum_2[permutation[k]];			
+					}	
+				}
+
+				gen_dir(alpha_gd,beta_gd,K);
+				permutation_current();	
+				if (c_sum>0){
+					dir(w_temp,c_sum);
+					for (k = 0; k < K - c_sum; k++){
+						w_temp[k] = u[k];
+					}
+					for (k = K-c_sum; k < K; k++){
+						w_temp[k] = v[k - K + c_sum]*u_sum_c1;
+					}
+					for (k = 0; k < K; k++){
+						w[k] = w_temp[inv_permutation[k]];
+					}
+				}else{
+					for (k = 0; k< K; k++){
+						w[k] = theta[k];
+					}
+				}
+//###########################################################################################
+//###########################################################################################
 				for (i = 0; i<K; ++i){
 					de_file << c_vec[i] << " ";
 					if (switchCondition == 0){
@@ -774,7 +737,6 @@ int main()
 				de_file << endl;
 				theta_out << endl;
 				w_out << endl;
-
 				if (iter % 1000 == 0){
 					cout << "Iteration " << iter <<": RJ rate = "<<setprecision(3)<<100.0*rj_rate/iter <<"%, time: "<< setprecision(5)<< t_end - t_start<<" sec."<< "\n\n";
 					cout << sum_1[0] << ", " << sum_2[0]<<"\n";
@@ -782,8 +744,8 @@ int main()
 			}
 	//##################################################################################################################
 		}
-
 		ar_out << rj_rate/iter << endl;
+
 	}
 
 	ofstream de_file ( output_file.data() );
@@ -801,30 +763,6 @@ int main()
 	}
 
 	cout << "Sampling done."<<endl;
-
-
-//	for (k = 0; k<y_1[0]; k++){
-//		cout << c_1[0][k] << ", " << x_1[0][k] <<endl;
-//	}
-//	cout << "   "<<endl;
-//	for (k = 0; k<y_2[0]; k++){
-//		cout << c_2[0][k]<< ", " << x_2[0][k] <<endl;
-//	}
-//	cout << "   "<<endl;
-
-
-//	for (k = 0; k<y_1[0]; k++){
-//		cout << c_1[0][k]<< ", " << x_1[0][k] <<endl;
-//	}
-//	cout << "   "<<endl;
-//	for (k = 0; k<y_2[0]; k++){
-//		cout << c_2[0][k]<< ", " << x_2[0][k] <<endl;
-//	}
-//	cout << "   "<<endl;
-
-
-
-
 
 return(0);
 }
@@ -891,6 +829,83 @@ double log_beta(double b, double a1, double a2){
 }
 
 
+/*
+*****************************************************************************************
+ 	Function to compute the log f(xi_alloc,z_alloc|c), given xi_alloc, z_alloc, c	*
+*****************************************************************************************								
+*/
+
+
+double log_f_c_old(){
+	double pdf, u1, talHeads, talHeads2, sum_lg_c0, lg_sum_c1, lg_sum_c1_2, sum_lg_c1, lg_sum_c1_3, sum_lg_c1_3;
+	int k;
+	sum_lg_c0 = 0.0;
+	lg_sum_c1 = 0.0;
+	lg_sum_c1_2 = 0.0;
+	sum_lg_c1 = 0.0;
+	lg_sum_c1_3 = 0.0; 
+	sum_lg_c1_3 = 0.0;
+	c_sum = 0;
+	for(k = 0; k < K; k++){
+		talHeads2 = alpha_prior[k] + sum_1[k]; 
+		talHeads = talHeads2 + sum_2[k];
+		if(c_vec[k] == 0){
+			sum_lg_c0 +=  boost::math::lgamma(talHeads);
+		}else{
+			lg_sum_c1 += talHeads;
+			lg_sum_c1_2 += talHeads2;
+			sum_lg_c1 +=  boost::math::lgamma(talHeads2);
+			u1 = gamma_prior[0] + sum_2[k];
+			sum_lg_c1_3 += boost::math::lgamma(u1);
+			lg_sum_c1_3 += u1;
+			c_sum++;
+		}	
+	}
+	lg_sum_c1 = boost::math::lgamma(lg_sum_c1);
+	lg_sum_c1_2 = boost::math::lgamma(lg_sum_c1_2);
+	lg_sum_c1_3 = boost::math::lgamma(lg_sum_c1_3);
+	pdf = lg_sum_c1 + sum_lg_c0 + sum_lg_c1 + sum_lg_c1_3 - lg_sum_c1_2 - lg_sum_c1_3; 
+	return pdf;
+}
+
+/*
+*****************************************************************************************
+ 	Function to compute the log f(xi,z|c_new) 					*
+*****************************************************************************************								
+*/
+
+double log_f_c_new(){
+	double pdf, u1, talHeads, talHeads2, sum_lg_c0, lg_sum_c1, lg_sum_c1_2, sum_lg_c1, lg_sum_c1_3, sum_lg_c1_3;
+	int k;
+
+	sum_lg_c0 = 0.0;
+	lg_sum_c1 = 0.0;
+	lg_sum_c1_2 = 0.0;
+	sum_lg_c1 = 0.0;
+	lg_sum_c1_3 = 0.0; 
+	sum_lg_c1_3 = 0.0;
+	for(k = 0; k < K; k++){
+		talHeads2 = alpha_prior[k] + sum_1[k]; 
+		talHeads = talHeads2 + sum_2[k];
+		if(c_new[k] == 0){
+			sum_lg_c0 +=  boost::math::lgamma(talHeads);
+		}else{
+			lg_sum_c1 += talHeads;
+			lg_sum_c1_2 += talHeads2;
+			sum_lg_c1 +=  boost::math::lgamma(talHeads2);
+			u1 = gamma_prior[0] + sum_2[k];
+			sum_lg_c1_3 += boost::math::lgamma(u1);
+			lg_sum_c1_3 += u1;
+		}	
+	}
+	lg_sum_c1 = boost::math::lgamma(lg_sum_c1);
+	lg_sum_c1_2 = boost::math::lgamma(lg_sum_c1_2);
+	lg_sum_c1_3 = boost::math::lgamma(lg_sum_c1_3);
+	pdf = lg_sum_c1 + sum_lg_c0 + sum_lg_c1 + sum_lg_c1_3 - lg_sum_c1_2 - lg_sum_c1_3; 
+	return pdf;
+}
+
+
 
 void dir( vector<double>& a_pars, int n_comps){
 	int i;
@@ -939,6 +954,154 @@ double unifRand()
 }
 
 
+
+double allocateCollapsed(int sample1, int sample2){
+int z,i,k,sample_start, sample_end;
+double uni, z_prob_sum, z_dist, u1, u2, talHeads;
+
+sample_start = cum_sum_1[sample1-1] - r[sample1-1];
+sample_end = cum_sum_1[sample1-1];
+
+
+
+// sum_1 = {s_k(xi); k = 1, ..., K}
+// sum_2 = {s_k(z); k = 1, ..., K}
+	for (i = sample_start; i < sample_end; i++){
+		z = xi_alloc[i];
+		//cout<<", "<< i << ", previous alloc_i = " << z << "  ---------"<< endl;
+		u1 = 0.0;
+		u2 = 0.0;
+		z_prob_sum = 0.0;
+		for (k = 0; k < K; k++){
+			talHeads = alpha_prior[k] + sum_1[k];
+			if(c_vec[k] == 0){
+				theta[k] = talHeads + sum_2[k];
+			}else{
+				theta[k] = talHeads;
+				u1 += talHeads + sum_2[k];
+				u2 += talHeads;
+			}
+		}
+		theta[z] = theta[z] - 1.0;
+		if(c_vec[z] == 1){
+			u1 = u1 - 1.0;
+			u2 = u2 - 1.0;
+		}
+		for (k = 0; k < y_1[i]; k++){
+			if(c_vec[c_1[i][k]] == 0){
+				theta[c_1[i][k]] *= x_1[i][k];
+			}else{
+				theta[c_1[i][k]] *= u1*x_1[i][k]/u2;
+			}
+			z_prob_sum += theta[c_1[i][k]];			
+		}
+
+		k = 0;
+		z_prob[k] = theta[c_1[i][k]]/z_prob_sum;
+		z_dist = z_prob[k];
+		uni = unifRand();
+		xi_alloc[i] = c_1[i][k];
+		if (z_prob[k] != z_prob[k]){
+			cout <<"oops"<<endl;z_prob[k] = threshold;
+			//cout << " i = "<< i << ", f_i_k = " << x_1[i][k] << ", sum = "<< z_prob_sum << ", theta = " << theta[c_1[i][k]] <<endl;	
+			//cin.get();
+		}
+		while(uni > z_dist && k < y_1[i] - 1 ){
+			k++;
+			z_prob[k] = theta[c_1[i][k]]/z_prob_sum;
+			if (z_prob[k] != z_prob[k]){cout <<"oops"<<endl;z_prob[k] = threshold;
+					cout <<"oops"<<endl;z_prob[k] = threshold;
+					//cout << " i = "<< i << ", f_i_k = " << x_1[i][k]<< ", sum = "<< z_prob_sum <<endl;	
+					//cin.get();
+			}
+			z_dist = z_dist + z_prob[k];
+//			cout <<"k = "<<k<<", u = "<< uni<<", z_dist = " <<z_dist<<", comp = "<<c_1[i][k]<<endl;
+//			cout << " i = "<< i << ", f_i_k = " << x_1[i][k]<< ", sum = "<< z_dist <<endl;	
+		}
+//		cout << "andronikos: " << k <<endl;
+		if ( k >= y_1[i]){cout<<"shit"<<endl;k = y_1[i] - 1;}
+//		cout << "talking heads: " << c_1[i][k] <<endl;
+		//if(c_1[i][k] > K ){xi_alloc[i] = 0;}else{
+		xi_alloc[i] = c_1[i][k];
+//		cout << "xi_alloc: " << xi_alloc[i] << endl;
+		//}
+		sum_1[xi_alloc[i]]++; 
+//		cout << "edw: " << sum_1[xi_alloc[i]] << endl;
+		sum_1[z] += -1; 
+//		cout << "ekei: " << sum_1[z] << endl;
+	}
+
+//cout << "edw"<<endl;
+// condition B
+sample_start = cum_sum_2[sample2-1] - s[sample2-1];
+sample_end = cum_sum_2[sample2-1] ;
+
+	for (i = sample_start; i < sample_end; i++){
+		//cout<< "B: "<< i << endl;
+		z = z_alloc[i];
+		u1 = 0.0;
+		u2 = 0.0;
+		z_prob_sum = 0.0;
+		for (k = 0; k < K; k++){
+			talHeads = alpha_prior[k] + sum_1[k];
+			if(c_vec[k] == 0){
+				w[k] = talHeads + sum_2[k];
+			}else{
+				w[k] = gamma_prior[0] + sum_2[k];
+				u1 += talHeads + sum_2[k];
+				u2 += w[k];
+			}
+		}
+		w[z] = w[z] - 1.0;
+		if(c_vec[z] == 1){
+			u1 = u1 - 1.0;
+			u2 = u2 - 1.0;
+		}
+		for (k = 0; k < y_2[i]; k++){
+			if(c_vec[c_2[i][k]] == 0){
+				w[c_2[i][k]] *= x_2[i][k];
+			}else{
+				w[c_2[i][k]] *= u1*x_2[i][k]/u2;
+			}
+			z_prob_sum += w[c_2[i][k]];			
+		}
+
+		k = 0;
+		z_prob[k] = w[c_2[i][k]]/z_prob_sum;
+		z_dist = z_prob[k];
+		uni = unifRand();
+		z_alloc[i] = c_2[i][k];
+		//cout <<"k = "<<k<<", u = "<< uni<<", z_dist = " <<z_dist <<", comp = "<<c_1[i][k]<<endl;
+		if (z_prob[k] != z_prob[k]){
+			cout <<"oops"<<endl;z_prob[k] = threshold;
+			//cout << " i = "<< i << ", f_i_k = " << x_1[i][k] << ", sum = "<< z_prob_sum << ", theta = " << theta[c_1[i][k]] <<endl;	
+			//cin.get();
+		}
+		while(uni > z_dist && k < y_2[i]-1 ){
+			k++;
+			z_prob[k] = w[c_2[i][k]]/z_prob_sum;
+			if (z_prob[k] != z_prob[k]){cout <<"oops"<<endl;z_prob[k] = threshold;
+					cout <<"oops"<<endl;z_prob[k] = threshold;
+					//cout << " i = "<< i << ", f_i_k = " << x_1[i][k]<< ", sum = "<< z_prob_sum <<endl;	
+					//cin.get();
+			}
+			z_dist = z_dist + z_prob[k];
+			//cout <<"k = "<<k<<", u = "<< uni<<", z_dist = " <<z_dist<<", comp = "<<c_1[i][k]<<endl;
+		}
+
+		if ( k >= y_2[i]){cout<<"shit"<<endl;k = y_2[i] - 1;}
+		z_alloc[i] = c_2[i][k];
+		sum_2[z_alloc[i]]++; 
+		sum_2[z] += -1; 
+	}
+
+cout << "cluster: "<< myClustID<< ": " << sum_1[K-1] <<", "<< sum_2[K-1]<<endl;
+//exit(1);
+
+
+
+return(1.0);
+}
 
 
 double allocate(int sample1, int sample2){
@@ -992,7 +1155,10 @@ for (i = sample_start; i < sample_end; i++){
 	}
 
 	if ( k >= y_1[i]){cout<<"shit"<<endl;k = y_1[i] - 1;}
+	//if ( k >= y_1[i]){cout<<"shit"<<endl;k = 1;}
 	z = c_1[i][k];
+
+	xi_alloc[i] = z;
 	//cout <<"z = "<<z<<endl;
 	//cout <<"-------------------------------- "<<endl;
 	//cin.get();
@@ -1032,6 +1198,7 @@ for (i = sample_start; i < sample_end; i++){
 	}
 	if ( k >= y_2[i]){cout<<"shit"<<endl;k = y_2[i] - 1;}
 	z = c_2[i][k];
+	z_alloc[i] = z;
 	sum_2[z]++; 
 	p_alloc += log(z_prob[k]);
 	//log_likelihood += log(w[z]) + log(x_2[i][k]);
@@ -1075,11 +1242,9 @@ void permutation_current(){
 
 int k, iter1,iter2;
 
-
 iter1 = 0;
 iter2 = 0;
 u_sum_c1 = 0.0;
-//cout << "###################### "<<endl;
 for (k = 0; k<K; k++){
 	if (c_vec[k] == 0){
 		iter1++;
@@ -1092,13 +1257,31 @@ for (k = 0; k<K; k++){
 		inv_permutation[k] = K - c_sum - 1 + iter2;	
 		theta[k] = u[inv_permutation[k]];
 		u_sum_c1 += theta[k];
-		//cout << inv_permutation[k];
 	}
-	//cout <<c_vec[k]<<" "<< permutation[k]<<" "<< inv_permutation[k]<<endl;
+}
 }
 
 
+
+void permutation_current_collapsed(){
+int k, iter1,iter2;
+iter1 = 0;
+iter2 = 0;
+for (k = 0; k<K; k++){
+	if (c_vec[k] == 0){
+		iter1++;
+		permutation[iter1-1] = k;
+		inv_permutation[k] = iter1 - 1;
+	}else{
+		iter2++;
+		permutation[K - c_sum - 1 + iter2] = k;
+		inv_permutation[k] = K - c_sum - 1 + iter2;	
+	}
 }
+}
+
+
+
 
 
 /*
@@ -1106,10 +1289,7 @@ for (k = 0; k<K; k++){
 */
 
 void permutation_prop(){
-
 int k, iter1,iter2;
-
-
 iter1 = 0;
 iter2 = 0;
 u_sum_c1_new = 0.0;
@@ -1125,30 +1305,33 @@ for (k = 0; k<K; k++){
 		inv_permutation_new[k] = K - c_sum_new - 1 + iter2;	
 		u_sum_c1_new += theta[k];
 	}
-	//sp = inv_permutation[permutation_new[k]];
-	//u_temp[k] = u[sp]; //u_temp denotes u_new
 	u_temp1[k] = u[inv_permutation[k]];
 }
-
 for (k = 0; k<K; k++){
 	u_temp[k] = u_temp1[permutation_new[k]];
 }
-/*
-				cout << "u = ";				
-				for (k = 0; k<K; k++){
-					cout << u[k]<<" ";
-				}
-				cout << endl;
-				cout << "u' = ";				
-				for (k = 0; k<K; k++){
-					cout << u_temp[k]<<" ";
-				}
-				cout << endl;
-*/
-
-
-
 }
+
+
+void permutation_prop_collapsed(){
+int k, iter1,iter2;
+iter1 = 0;
+iter2 = 0;
+for (k = 0; k<K; k++){
+	if (c_new[k] == 0){
+		iter1++;
+		permutation_new[iter1-1] = k;
+		inv_permutation_new[k] = iter1 - 1;
+	}else{
+		iter2++;
+		permutation_new[K - c_sum_new - 1 + iter2] = k;
+		inv_permutation_new[k] = K - c_sum_new - 1 + iter2;	
+	}
+}
+}
+
+
+
 
 
 /*
@@ -1341,6 +1524,40 @@ double birth_accept_prob(double ll_old, double ll_new,double p_all_old, double p
 	return(lap);
 }
 
+
+
+
+
+/*		Birth acceptance probability for the Metropolis-Hastings step
+#################################################################################################
+*/
+
+double birth_mh(double ll_old, double ll_new, int c_s_old,int c_s_new){
+
+	double lap, prop_ratio, prior_ratio, ll_ratio, birth_prop, death_prop;
+
+//	prior_ratio = 0.0;					//this is the 1/(2^{K} - K) prior for c
+	
+	if (c_s_old == 0){
+		birth_prop = bp(c_s_old) + log(2.0) - log(K+0.0) - log(K - 1.0);
+		death_prop = dp(c_s_new); 
+		prior_ratio = 2.0*log(gPrior) - 2.0*log(1.0 - gPrior);
+		if (prior_c > 0){
+			prior_ratio = - log(K - 1.0) - log(K + 0.0); 		//this is used if prior_c = 1
+		}
+	}else{
+		birth_prop = bp(c_s_old) - log(K - c_s_old);
+		death_prop = dp(c_s_new) - log(c_s_old - 1.0);
+		prior_ratio = log(gPrior) - log(1.0 - gPrior);
+		if (prior_c > 0){
+			prior_ratio = log(c_s_old + 1) - log(K - c_s_old + 0.0); //this is used if prior_c = 1
+		}
+	}
+	prop_ratio = death_prop - birth_prop;  
+	ll_ratio = ll_new - ll_old;
+	lap = ll_ratio + prop_ratio + prior_ratio;
+	return(lap);
+}
 
 
 

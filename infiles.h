@@ -13,7 +13,7 @@ const int nChains = 6;
 const std::string output_file = "state_vector.txt";
 const std::string theta_file = "theta.txt";
 const std::string w_file = "w.txt";
-
+const std::string ar_file = "acceptance.txt";
 const std::string prob_file_1 = "../../conditionA";
 const std::string prob_file_2 = "../../conditionB";
 const std::string tr_info_file = "data.tr";
