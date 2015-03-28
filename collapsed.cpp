@@ -597,7 +597,8 @@ int main()
 
 		vector<double> xgty (K,0.0);
 		vector<double> ygtx (K,0.0);
-
+		vector<double> cDist (2,0.0);
+		double cDistSum;
 		tot_sum1 = r[0]/papasA[0] + s[0]/papasB[0] + K;
 		tot_sum2 = r[0]/papasA[0] + K;
 		//cout << tot_sum1 << ", " << tot_sum2 <<endl;
@@ -608,63 +609,30 @@ int main()
 			//cout << iter <<endl;
 			allocateCollapsed(sample1, sample2);	// generate allocations (and compute c_sum) 
 			permutation_current_collapsed();
-			log_likelihood = log_f_c_old();
-	//		Metropolis Hastings
-			uni = unifRand();
-			uni = log(uni);
-			if (uni < bp(c_sum)){
-				if (c_sum == 0){
-					std::fill (c_new.begin(),c_new.end(),0);
-					j1 = rand() % K;
-					j2 = rand() % K;
-					while(j1 == j2){
-						j2 = rand() % K;
-					}
-					if(j1>j2){i = j1; j1 = j2; j2 = i;}
-					c_new[j1] = 1;
-					c_new[j2] = 1;
-					c_sum_new = 2;
-				}else{
-					j = rand() % (K-c_sum);
-					k = permutation[j];
-					for(i = 0; i < k;i++){c_new[i] = c_vec[i];}
-					c_new[k] = 1;
-					for(i = k+1; i < K;i++){c_new[i] = c_vec[i];}
-					c_sum_new = c_sum +1;
+			for (k = 1; k < K - 1; k++){
+				for (i = 0; i < K; i++){
+					c_new[i] = c_vec[i];
 				}
-				log_likelihood_new = log_f_c_new();
-				prob = birth_mh(log_likelihood, log_likelihood_new, c_sum,c_sum_new);
-				//prob = birth_accept_mh(log_likelihood, log_likelihood_new, p_alloc, p_alloc_new, c_sum,c_sum_new,delta);
-				prob = 0.0;
-			
-			}else{
-				if (c_sum ==2){
-					std::fill (c_new.begin(),c_new.end(),0);				
-					c_sum_new = 0;
-				}else{
-					j = 1 + rand() % (c_sum-2);
-					k = permutation[K - c_sum + j];
-					for(i = 0; i < k;i++){c_new[i] = c_vec[i];}
-					c_new[k] = 0;
-					for(i = k+1; i < K;i++){c_new[i] = c_vec[i];}
-					c_sum_new = c_sum -1;
+				uni = unifRand();
+				c_new[k] = 0;
+				cDist[0] = log_f_c_new() + log(1.0-gPrior);
+				c_new[k] = 1;
+				cDist[1] = log_f_c_new() + log(gPrior);
+				cDist[0] = 1.0/(1.0 + exp(cDist[1] - cDist[0]));
+				//cout << cDist[0] << endl;
+				if(uni < cDist[0]){
+					c_vec[k] = 0;
+					}else{
+					c_vec[k] = 1;
 				}
-				log_likelihood_new = log_f_c_new();
-				prob = - birth_mh(log_likelihood_new, log_likelihood, c_sum_new,c_sum);
-				//prob = - birth_mh(log_likelihood_new, log_likelihood, p_alloc_new, p_alloc, c_sum_new,c_sum,delta);
+
 			}
-		
-			uni = unifRand();
-			uni = log(uni);
-			if ( uni < prob){
-				for (k = 0; k < K; k++){
-					c_vec[k] = c_new[k];
-					gamma_prior[k] = 1.0;
-				}
-				c_sum = c_sum_new;
-				rj_rate++;
-				permutation_current_collapsed(); //update permutation
-			} 
+			c_sum = 0;
+			for (k = 0; k < K; k++){
+				c_sum += c_vec[k];
+				gamma_prior[k] = 1.0;
+			}
+			permutation_current_collapsed(); //update permutation
 //			Update gPrior:
 			gPrior = beta_rand(c_sum + 0.5, K - c_sum + 0.5);
 			//gPrior = 0.95;
@@ -1095,7 +1063,7 @@ sample_end = cum_sum_2[sample2-1] ;
 		sum_2[z] += -1; 
 	}
 
-cout << "cluster: "<< myClustID<< ": " << sum_1[K-1] <<", "<< sum_2[K-1]<<endl;
+//cout << "cluster: "<< myClustID<< ": " << sum_1[K-1] <<", "<< sum_2[K-1]<<endl;
 //exit(1);
 
 
